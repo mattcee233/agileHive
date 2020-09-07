@@ -13,7 +13,7 @@ Install+Run
 
 - Optional: Setup MySQL database if wanted - see below
 
-3. Navigate to directory using command prompt/terminal
+3. Navigate to miner_manager_2_backend directory using command prompt/terminal
 
 4. Run "npm install" 
 
