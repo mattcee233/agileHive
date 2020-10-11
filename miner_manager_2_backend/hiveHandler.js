@@ -51,7 +51,7 @@ module.exports.init = async function init(forceNewToken=false){
             console.log(err.response.data)
         }
         if (!hiveResponse.status===200) {
-                
+            
             console.error(hiveResponse.statusText || 'Response error');
             // throw new Error(responseData.message || 'Response error');
         }
@@ -72,9 +72,9 @@ async function refreshHiveToken(){
     try{
         console.log("Refreshing API token...")
         let newToken = await axios.post(process.env.hiveBaseURI+"/auth/refresh",{
-        headers: {
-            'Authorization': `Bearer ${hiveToken}`,
-        }
+            headers: {
+                'Authorization': `Bearer ${hiveToken}`,
+            }
         });
         console.log("Got new token! - Token dies in "+moment.duration({seconds:newToken.data.expires_in}).humanize() + "...");
         hiveToken = newToken.data.access_token;
@@ -84,14 +84,14 @@ async function refreshHiveToken(){
     catch(err){
         console.log(err.response.data)
         console.log("Token refresh failed, trying to get a new token...");
-        await getHiveToken();
+        await this.init(true);
     }
 }
 
 
 
 
-async function getData(endpoint){
+async function getData(endpoint,retrying=false){
     // await checkToken();
     let hiveResponse = await axios.get(process.env.hiveBaseURI+endpoint, {
         
@@ -104,8 +104,13 @@ async function getData(endpoint){
     // let responseData = await farmResponse.json();
 
     if (!hiveResponse.status===200) {
+        if(retrying===false){
+            await refreshHiveToken();
+            return await getData(endpoint,true);
             
+        }
         console.error(hiveResponse.statusText || 'Response error');
+        
         // throw new Error(responseData.message || 'Response error');
     }
     else {
@@ -115,7 +120,7 @@ async function getData(endpoint){
     }
 }
 
-async function sendCommand(endpoint,command,payload){
+async function sendCommand(endpoint,command,payload,retrying=false){
     // await checkToken();
     // console.log("sending "+command+" command with data "+JSON.stringify(payload)+" to " + endpoint + " endpoint...")
     let hiveResponse;
@@ -157,6 +162,11 @@ async function sendCommand(endpoint,command,payload){
     // let responseData = await farmResponse.json();
 
     if (!hiveResponse.status===200) {
+        if(retrying===false){
+            await refreshHiveToken();
+            return await sendCommand(endpoint,command,payload,true);
+            
+        }
             
         console.error(hiveResponse.statusText || 'Response error');
         // throw new Error(responseData.message || 'Response error');
@@ -173,27 +183,27 @@ module.exports.stopMiners = async function stopMiners(duration=1800){
 
     // let farmData = await getData("/farms");
     // farmData = farmData.data;
-
-    if(workerList.length<1){
-        await this.minerData();
-    }
-    
-    for (let worker of workerList){
-        if(process.env.shutdownType==="hard"){
-        // loop through workers and shutdown with a restart timer of {duration} length       
-            await sendCommand(worker+"/command","exec",{cmd:"sreboot wakealarm "+duration});
+    if(process.env.shutdownType!=="none"){
+        if(workerList.length<1){
+            await this.minerData();
         }
-        else{
-            await sendCommand(worker+"/command","miner", {"action":"stop","miner_index":0});
-            setTimeout((worker)=>{sendCommand(worker+"/command","miner", {"action":"restart","miner_index":0})},duration*1000,worker);
+        
+        for (let worker of workerList){
+            if(process.env.shutdownType==="hard"){
+            // loop through workers and shutdown with a restart timer of {duration} length       
+                await sendCommand(worker+"/command","exec",{cmd:"sreboot wakealarm "+duration});
+            }
+            else{
+                await sendCommand(worker+"/command","miner", {"action":"stop","miner_index":0});
+                setTimeout((worker)=>{sendCommand(worker+"/command","miner", {"action":"restart","miner_index":0})},duration*1000,worker);
+            }
+            // await sendCommand(worker+"/command","miner stop");
         }
-        // await sendCommand(worker+"/command","miner stop");
-    }
 
-    global.minersOffline=true;
-    global.recoveryPeriod=true;
-    setTimeout(()=>{global.recoveryPeriod=false},(duration*1000)+7200000);
-    
+        global.minersOffline=true;
+        global.recoveryPeriod=true;
+        setTimeout(()=>{global.recoveryPeriod=false},(duration*1000)+7200000);
+    }
 
 }
 
